@@ -1,7 +1,8 @@
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Token {
-    Heading(HeadingLevel, String)
+    Heading(HeadingLevel, String),
+    Text(String),
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -17,6 +18,7 @@ pub enum HeadingLevel {
 
 fn tokenize(heading: &'static str) -> Vec<Token> {
     let mut tokens = Vec::new();
+    let mut text_buffer = String::new();
 
     let mut line = heading.chars().peekable();
 
@@ -24,6 +26,7 @@ fn tokenize(heading: &'static str) -> Vec<Token> {
         // 行の1文字目
         match c {
             '#' => {
+                // h要素
                 let mut heading_level = 1;
 
                 while line.peek() == Some(&'#') {
@@ -48,10 +51,26 @@ fn tokenize(heading: &'static str) -> Vec<Token> {
 
                     line.clone().collect()
                 ));
+
+                break;
             },
             _ => {
-                ()
+                // p要素
+                text_buffer.push(c)
             }
+        }
+    }
+
+    if !text_buffer.is_empty() {
+        tokens.push(Token::Text(text_buffer.clone()));
+        text_buffer.clear();
+    }
+
+    tokens.push(Token::Text("\n".to_string()));
+
+    if let Some(Token::Text(last)) = tokens.last() {
+        if last == "\n" {
+            tokens.pop();
         }
     }
 
@@ -59,9 +78,11 @@ fn tokenize(heading: &'static str) -> Vec<Token> {
 }
 
 fn main() {
-    let str = "## Hello World";
+    let h = "## Hello World";
+    let p = "Hello World";
 
-    println!("{:?}", tokenize(str));
+    println!("{:?}", tokenize(h));
+    println!("{:?}", tokenize(p));
 }
 
 #[cfg(test)]
@@ -70,11 +91,15 @@ mod tests {
 
     #[test]
     fn test_tokenize() {
+        // h要素
         assert_eq!(tokenize("# hello"), vec![Token::Heading(HeadingLevel::H1, "hello".to_string())]);
         assert_eq!(tokenize("## hello world"), vec![Token::Heading(HeadingLevel::H2, "hello world".to_string())]);
         assert_eq!(tokenize("### hello world"), vec![Token::Heading(HeadingLevel::H3, "hello world".to_string())]);
         assert_eq!(tokenize("#### hello world"), vec![Token::Heading(HeadingLevel::H4, "hello world".to_string())]);
         assert_eq!(tokenize("##### hello world"), vec![Token::Heading(HeadingLevel::H5, "hello world".to_string())]);
         assert_eq!(tokenize("###### hello world"), vec![Token::Heading(HeadingLevel::H6, "hello world".to_string())]);
+
+        // p要素
+        assert_eq!(tokenize("hello world"), vec![Token::Text("hello world".to_string())]);
     }
 }
