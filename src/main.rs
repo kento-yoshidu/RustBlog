@@ -1,14 +1,17 @@
+use std::{arch::x86_64::_CMP_TRUE_UQ, fmt::format};
+
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Token {
     Heading(HeadingLevel, String),
+    Bold(String),
     Text(String),
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum HeadingLevel {
-    H1 = 1,
+    H1,
     H2,
     H3,
     H4,
@@ -19,13 +22,14 @@ pub enum HeadingLevel {
 fn tokenize(heading: &'static str) -> Vec<Token> {
     let mut tokens = Vec::new();
     let mut text_buffer = String::new();
+    let mut in_bold = false;
 
     let mut line = heading.chars().peekable();
 
     while let Some(c) = line.next() {
         // 行の1文字目
-        match c {
-            '#' => {
+        match (c, in_bold) {
+            ('#', false) => {
                 // h要素
                 let mut heading_level = 1;
 
@@ -54,11 +58,36 @@ fn tokenize(heading: &'static str) -> Vec<Token> {
 
                 break;
             },
+            ('*', false) if line.peek() == Some(&'*') => {
+                line.next();
+
+                if !text_buffer.is_empty() {
+                    tokens.push(Token::Text(text_buffer.clone()));
+                    text_buffer.clear();
+                }
+
+                in_bold = true;
+            },
+            ('*', true) if line.peek() == Some(&'*') => {
+                line.next();
+
+                tokens.push(Token::Bold(text_buffer.clone()));
+                text_buffer.clear();
+
+                in_bold = false;
+            },
             _ => {
                 // p要素
                 text_buffer.push(c)
             }
         }
+    }
+
+    // **が閉じられない時
+    if in_bold {
+        tokens.push(Token::Text(format!("**{}", text_buffer)));
+        text_buffer.clear();
+        in_bold = false;
     }
 
     if !text_buffer.is_empty() {
@@ -80,9 +109,9 @@ fn tokenize(heading: &'static str) -> Vec<Token> {
 fn main() {
     let h = "## Hello World";
     let p = "Hello World";
+    let b = "wow **Hello World** foo";
 
-    println!("{:?}", tokenize(h));
-    println!("{:?}", tokenize(p));
+    println!("{:?}", tokenize("**hello"));
 }
 
 #[cfg(test)]
@@ -98,6 +127,12 @@ mod tests {
         assert_eq!(tokenize("#### hello world"), vec![Token::Heading(HeadingLevel::H4, "hello world".to_string())]);
         assert_eq!(tokenize("##### hello world"), vec![Token::Heading(HeadingLevel::H5, "hello world".to_string())]);
         assert_eq!(tokenize("###### hello world"), vec![Token::Heading(HeadingLevel::H6, "hello world".to_string())]);
+
+        // bold
+        assert_eq!(tokenize("**hello world**"), vec![Token::Bold(("hello world").to_string())]);
+        assert_eq!(tokenize("my **Rust** blog"), vec![Token::Text("my ".to_string()), Token::Bold(("Rust").to_string()), Token::Text(" blog".to_string())]);
+        assert_eq!(tokenize("**hello world"), vec![Token::Text("**hello world".to_string())]);
+        // assert_eq!(tokenize("my **Rust blog"), vec![Token::Text("**hello world".to_string())]);
 
         // p要素
         assert_eq!(tokenize("hello world"), vec![Token::Text("hello world".to_string())]);
