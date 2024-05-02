@@ -1,87 +1,74 @@
-use std::{arch::x86_64::_CMP_TRUE_UQ, fmt::format};
+mod token;
+mod ast;
+mod parse;
 
-#[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum Token {
-    Heading(HeadingLevel, String),
-    Bold(String),
-    Text(String),
-}
+use parse::parse;
+use token::{Token, HeadingLevel};
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub enum HeadingLevel {
-    H1,
-    H2,
-    H3,
-    H4,
-    H5,
-    H6,
-}
-
-fn tokenize(heading: &'static str) -> Vec<Token> {
+fn tokenize(input: &'static str) -> Vec<Token> {
     let mut tokens = Vec::new();
     let mut text_buffer = String::new();
     let mut in_bold = false;
 
-    let mut line = heading.chars().peekable();
+    for line in input.lines() {
+        let mut chars = line.chars().peekable();
 
-    while let Some(c) = line.next() {
-        // 行の1文字目
-        match (c, in_bold) {
-            ('#', false) => {
-                // h要素
-                let mut heading_level = 1;
+        while let Some(c) = chars.next() {
+            // 行の1文字目
+            match (c, in_bold) {
+                ('#', false) => {
+                    // h要素
+                    let mut heading_level = 1;
 
-                while line.peek() == Some(&'#') {
-                    line.next();
-                    heading_level += 1;
-                }
+                    while chars.peek() == Some(&'#') {
+                        chars.next();
+                        heading_level += 1;
+                    }
 
-                while let Some(' ') = line.peek() {
-                    line.next();
-                }
+                    while let Some(' ') = chars.peek() {
+                        chars.next();
+                    }
 
-                tokens.push(Token::Heading(
-                    match heading_level {
-                        1 => HeadingLevel::H1,
-                        2 => HeadingLevel::H2,
-                        3 => HeadingLevel::H3,
-                        4 => HeadingLevel::H4,
-                        5 => HeadingLevel::H5,
-                        6 => HeadingLevel::H6,
-                        _ => unreachable!(),
-                    },
+                    tokens.push(Token::Heading(
+                        match heading_level {
+                            1 => HeadingLevel::H1,
+                            2 => HeadingLevel::H2,
+                            3 => HeadingLevel::H3,
+                            4 => HeadingLevel::H4,
+                            5 => HeadingLevel::H5,
+                            6 => HeadingLevel::H6,
+                            _ => unreachable!(),
+                        },
 
-                    line.clone().collect()
-                ));
+                        chars.clone().collect()
+                    ));
 
-                break;
-            },
-            ('*', false) if line.peek() == Some(&'*') => {
-                line.next();
+                    break;
+                },
+                ('*', false) if chars.peek() == Some(&'*') => {
+                    chars.next();
 
-                if !text_buffer.is_empty() {
-                    tokens.push(Token::Text(text_buffer.clone()));
+                    if !text_buffer.is_empty() {
+                        tokens.push(Token::Text(text_buffer.clone()));
+                        text_buffer.clear();
+                    }
+
+                    in_bold = true;
+                },
+                ('*', true) if chars.peek() == Some(&'*') => {
+                    chars.next();
+
+                    tokens.push(Token::Bold(text_buffer.clone()));
                     text_buffer.clear();
+
+                    in_bold = false;
+                },
+                _ => {
+                    // p要素
+                    text_buffer.push(c)
                 }
-
-                in_bold = true;
-            },
-            ('*', true) if line.peek() == Some(&'*') => {
-                line.next();
-
-                tokens.push(Token::Bold(text_buffer.clone()));
-                text_buffer.clear();
-
-                in_bold = false;
-            },
-            _ => {
-                // p要素
-                text_buffer.push(c)
             }
         }
-    }
 
     // **が閉じられない時
     if in_bold {
@@ -102,17 +89,17 @@ fn tokenize(heading: &'static str) -> Vec<Token> {
             tokens.pop();
         }
     }
+    }
 
     tokens
 }
 
 fn main() {
-    let h = "## Hello World";
-    let p = "Hello World";
-    let b = "wow **Hello World** foo";
+    let tokens = tokenize("## hello world \n learning Rust.");
 
-    println!("{:?}", tokenize("**hello"));
+    parse(&tokens);
 }
+
 
 #[cfg(test)]
 mod tests {
